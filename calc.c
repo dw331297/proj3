@@ -188,7 +188,7 @@ void *multiplier(void *arg)
     int startOffset, remainderOffset;
     int i;
     int value1, value2;
-    int result;     // sum of value1, value2
+    int result;     // product of value1, value2
     int changed;    // used to indicate buffer has changed
     char nString[50];
 
@@ -343,22 +343,22 @@ void *degrouper(void *arg)
                     i--;
                     continue;
                 }
+            
+                // remove ')' by shifting the tail end of the expression
+                strcpy( (buffer + i), (buffer + i + 1) );
+                
+                // remove '(' by shifting the beginning of the expression
+                strcpy( (buffer + startOffset), (buffer + startOffset + 1) );
+                
+                // set buffer length and position
+                bufferlen -= 2;
+                i = startOffset;
+                
+                // indicate change
+                changed = 1;
+                
+                num_ops++;
             }
-            
-            // remove ')' by shifting the tail end of the expression
-            strcpy( (buffer + i), (buffer + i + 1) );
-            
-            // remove '(' by shifting the beginning of the expression
-            strcpy( (buffer + startOffset), (buffer + startOffset + 1) );
-            
-            // set buffer length and position
-            bufferlen -= 2;
-            i = startOffset;
-            
-            // indicate change
-            changed = 1;
-            
-            num_ops++;
         }
         
         // unlock buffer
