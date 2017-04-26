@@ -58,7 +58,7 @@ typedef struct {
 static pid_t child_pid;
 static int sent_child_timeout_kill_signal;
 
-static void kill_child_signal_handler(intsigno)
+static void kill_child_signal_handler(int signo)
 {
     if (!child_pid)
 	return;

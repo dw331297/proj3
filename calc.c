@@ -11,7 +11,17 @@ pthread_t sentinelThread;
 char buffer[BUF_SIZE];
 int num_ops;
 static pthread_mutex_t buffer_lock = PTHREAD_MUTEX_INITIALIZER;
+static sem_t progress_lock;
 
+/**
+ *  holds condition flag variables
+ */
+struct progress_t
+{
+    int add;
+    int mult;
+    int group;
+} progress;
 
 /* Utiltity functions provided for your convenience */
 
@@ -64,10 +74,11 @@ int timeToFinish()
 void *adder(void *arg)
 {
     int bufferlen;
-    int value1, value2;
     int startOffset, remainderOffset;
     int i;
-    int result;
+    int value1, value2;
+    int result;     // sum of value1, value2
+    int changed;    // used to indicate buffer has changed
     char nString[50];
 
     while (1)
@@ -85,6 +96,9 @@ void *adder(void *arg)
 
         /* storing this prevents having to recalculate it in the loop */
         bufferlen = (int) strlen(buffer);
+        
+        // set changed to 0 to indicate no change yet
+        changed = 0;
 
         for (i = 0; i < bufferlen; i++)
         {
@@ -139,6 +153,10 @@ void *adder(void *arg)
                 // set buffer length and position
                 bufferlen = (int) strlen(buffer);
                 i = startOffset + ((int) strlen(nString)) - 1;
+                
+                // indicate that current thread has updated the buffer
+                changed = 1;
+                
                 // increment number of operations
                 num_ops++;
             }
@@ -146,6 +164,13 @@ void *adder(void *arg)
         
         // unlock buffer
         pthread_mutex_unlock(&buffer_lock);
+        
+        // update progress
+        // lock progress_t
+        sem_wait(&progress_lock);
+        progress.add = changed ? 2 : 1;
+        sem_post(&progress_lock);
+        
         // yield processor to other threads
         sched_yield();
     }
@@ -160,11 +185,13 @@ void *adder(void *arg)
 void *multiplier(void *arg)
 {
     int bufferlen;
-    int value1, value2;
     int startOffset, remainderOffset;
     int i;
-    int result;
+    int value1, value2;
+    int result;     // sum of value1, value2
+    int changed;    // used to indicate buffer has changed
     char nString[50];
+
 
     while (1)
     {
@@ -181,6 +208,9 @@ void *multiplier(void *arg)
         
         /* storing this prevents having to recalculate it in the loop */
         bufferlen = (int) strlen(buffer);
+        
+        // set changed to 0 to indicate no change yet
+        changed = 0;
         
         for (i = 0; i < bufferlen; i++)
         {
@@ -235,6 +265,10 @@ void *multiplier(void *arg)
                 // set buffer length and position
                 bufferlen = (int) strlen(buffer);
                 i = startOffset + ((int) strlen(nString)) - 1;
+                
+                // indicate that current thread has updated the buffer
+                changed = 1;
+                
                 // increment number of operations
                 num_ops++;
             }
@@ -242,6 +276,13 @@ void *multiplier(void *arg)
         
         // unlock buffer
         pthread_mutex_unlock(&buffer_lock);
+        
+        // update progress
+        // lock progress_t
+        sem_wait(&progress_lock);
+        progress.mult = changed ? 2 : 1;
+        sem_post(&progress_lock);
+        
         // yield processor to other threads
         sched_yield();
     }
@@ -258,6 +299,7 @@ void *degrouper(void *arg)
     int bufferlen;
     int startOffset = 0;
     int i;
+    int changed;
 
     while (1)
     {
@@ -273,6 +315,9 @@ void *degrouper(void *arg)
         /* storing this prevents having to recalculate it in the loop */
         bufferlen = (int) strlen(buffer);
 
+        // set changed flag to 0
+        changed = 0;
+        
         for (i = 0; i < bufferlen; i++)
         {
             // check for ';' to indicate finished processing expression
@@ -310,11 +355,21 @@ void *degrouper(void *arg)
             bufferlen -= 2;
             i = startOffset;
             
+            // indicate change
+            changed = 1;
+            
             num_ops++;
         }
         
         // unlock buffer
         pthread_mutex_unlock(&buffer_lock);
+        
+        // update progress
+        // lock progress_t
+        sem_wait(&progress_lock);
+        progress.group = changed ? 2 : 1;
+        sem_post(&progress_lock);
+        
         // yield processor to other threads
         sched_yield();
     }
@@ -379,6 +434,30 @@ void *sentinel(void *arg)
             {
                 numberBuffer[i] = buffer[i];
             }
+            
+            // check for progress
+            if (buffer[0] != '\0')
+            {
+                // lock progress semaphore
+                sem_wait(&progress_lock);
+                
+                // if all fields are 1 or 2 then all threads have run
+                if (progress.add && progress.mult && progress.group)
+                {
+                    if (progress.add > 1 || progress.mult > 1 || progress.group > 1)
+                    {
+                        // made progress: reset fields
+                        progress.add = progress.mult = progress.group = 0;
+                    }
+                    else
+                    {
+                        fprintf(stdout, "No progress can be made\n");
+                        exit(EXIT_FAILURE);
+                    }
+                }
+                
+                sem_post(&progress_lock);
+            }
         }
         
         // unlock buffer
@@ -442,6 +521,11 @@ void *reader(void *arg)
         // we can add another expression now
         strcat(buffer, tBuffer);
         strcat(buffer, ";");
+        
+        // reset flag that indicates progress status
+        sem_wait(&progress_lock);
+        progress.add = progress.mult = progress.group = 0;
+        sem_post(&progress_lock);
         
         // unlock buffer
         pthread_mutex_unlock(&buffer_lock);
