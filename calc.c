@@ -464,7 +464,7 @@ void *sentinel(void *arg)
         pthread_mutex_unlock(&buffer_lock);
         // yield processor to other threads
         sched_yield();
-    } // end while
+    }
 }
 
 /* 
@@ -498,7 +498,7 @@ void *reader(void *arg)
         }
 
         /* -1 for null terminator, -1 for ; separator */
-        free = sizeof(buffer) - currentlen - 2;
+        //free = sizeof(buffer) - currentlen - 2;
 
         do
         {
